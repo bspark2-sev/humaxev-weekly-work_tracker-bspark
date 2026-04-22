@@ -207,6 +207,7 @@
     padding: 24px 16px;
     text-align: center;
   }
+  #checklist-body > .empty { grid-column: 1 / -1; }
 
   /* === TOOLBAR === */
   .toolbar {
@@ -353,52 +354,81 @@
     .add-row-label { grid-column: 1 / -1; }
   }
 
-  /* === LIST (가로 레이아웃) === */
+  /* === LIST (카드 2열 그리드) === */
   .checklist {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
+    /* 바깥 래퍼 - 배경/테두리 없음 */
+  }
+  #checklist-body {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  @media (max-width: 900px) {
+    #checklist-body { grid-template-columns: 1fr; }
   }
 
-  /* 컬럼 헤더 */
-  .list-header {
-    display: grid;
-    grid-template-columns: 110px 220px 1.3fr 1fr auto;
-    gap: 12px;
-    padding: 8px 16px;
-    background: var(--bg-sub);
-    border-bottom: 1px solid var(--border);
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--ink-muted);
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-  }
-  .list-header > div { padding: 2px 0; }
+  /* 컬럼 헤더는 카드 구조에서는 숨김 */
+  .list-header { display: none; }
 
   .check-item {
     display: grid;
-    grid-template-columns: 110px 220px 1.3fr 1fr auto;
-    gap: 12px;
-    padding: 10px 16px;
-    align-items: start;
-    transition: background .12s;
+    grid-template-rows: auto auto 1fr auto;
+    gap: 10px;
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    transition: all .12s;
     position: relative;
+    min-width: 0;
   }
-  .check-item + .check-item { border-top: 1px solid var(--border); }
-  .check-item:hover { background: var(--surface-hover); }
-  .check-item.hold { background: var(--amber-soft); }
+  .check-item:hover {
+    border-color: var(--border-strong);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  }
+  .check-item.hold {
+    background: var(--amber-soft);
+    border-color: var(--amber);
+  }
   .check-item.hold::before {
     content: '';
     position: absolute; left: 0; top: 0; bottom: 0;
     width: 3px; background: var(--amber);
+    border-radius: var(--radius-lg) 0 0 var(--radius-lg);
   }
-  .check-item.all-done { background: var(--bg-sub); opacity: 0.75; }
+  .check-item.all-done {
+    background: var(--bg-sub);
+    opacity: 0.7;
+  }
   .check-item.all-done .site { text-decoration: line-through; color: var(--ink-muted); }
 
+  /* 카드 내부 1행: 카테고리 + 액션 */
+  .card-row-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-width: 0;
+  }
+  /* 2행: 현장명 */
+  .card-row-site { min-width: 0; }
+  /* 3행: 진행 내역 */
+  .card-row-memo { min-width: 0; }
+  /* 4행: 다음 할 일 */
+  .card-row-next { min-width: 0; }
+
+  .card-section-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--ink-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+    display: block;
+  }
+
   /* 카테고리 셀 */
-  .col-cat { display: flex; align-items: flex-start; padding-top: 2px; }
+  .col-cat { display: flex; align-items: center; min-width: 0; }
   .cat-tag {
     font-size: 11px; font-weight: 600;
     padding: 2px 8px;
@@ -423,7 +453,7 @@
   .col-site { min-width: 0; }
   .site {
     font-weight: 600;
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.35;
     word-break: keep-all;
   }
@@ -440,100 +470,162 @@
   .memo-history {
     font-size: 12.5px;
     color: var(--ink-soft);
-    line-height: 1.5;
+    line-height: 1.55;
     white-space: pre-wrap;
     word-break: keep-all;
+    min-height: 20px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    background: var(--bg-sub);
   }
   .memo-history:empty::before {
     content: '진행 내용 기록…';
     color: var(--ink-faint);
   }
-  .completed-log {
-    font-size: 11.5px;
-    color: var(--green);
-    margin-top: 4px;
-    padding-left: 10px;
-    border-left: 2px solid var(--green);
-    line-height: 1.5;
+  .memo-history:focus {
+    background: var(--surface);
   }
-  .completed-log .log-entry { display: block; }
-  .completed-log .log-entry + .log-entry { margin-top: 2px; }
-  .completed-log .log-check { font-weight: 600; margin-right: 4px; }
 
-  /* 다음 할 일 셀 (중요) */
+  /* 다음 할 일 셀 (여러 체크박스 리스트) */
   .col-next { min-width: 0; }
-  .next-box {
+  .next-list {
     display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .next-item {
+    display: grid;
+    grid-template-columns: 20px 1fr auto;
+    gap: 8px;
     align-items: center;
-    gap: 6px;
     padding: 5px 8px;
     background: var(--accent-soft);
     border: 1px solid var(--accent);
     border-radius: var(--radius);
     transition: all .12s;
+    min-height: 30px;
   }
-  .check-item.all-done .next-box {
+  .next-item.done {
     background: var(--green-soft);
     border-color: var(--green);
   }
-  .next-btn {
-    width: 22px; height: 22px;
+  .next-check {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 18px; height: 18px;
     border: 1.5px solid var(--accent);
     background: var(--surface);
     border-radius: 4px;
     cursor: pointer;
     display: grid; place-items: center;
-    font-size: 12px; color: var(--accent);
     flex-shrink: 0;
+    margin: 0;
     transition: all .12s;
   }
-  .next-btn:hover {
-    background: var(--accent); color: white;
-  }
-  .check-item.all-done .next-btn {
+  .next-check:hover { border-color: #224d78; }
+  .next-check:checked {
+    background: var(--green);
     border-color: var(--green);
-    color: var(--green);
-    cursor: default;
   }
-  .check-item.all-done .next-btn:hover {
-    background: var(--surface);
+  .next-check:checked::after {
+    content: '';
+    width: 9px; height: 5px;
+    border-left: 2px solid white;
+    border-bottom: 2px solid white;
+    transform: translateY(-1px) rotate(-45deg);
   }
 
-  .next-content {
-    flex: 1;
+  .next-text {
     font-size: 13px;
     font-weight: 500;
     color: var(--accent);
     outline: none;
     min-width: 0;
     word-break: keep-all;
+    line-height: 1.4;
   }
-  .check-item.all-done .next-content { color: var(--green); }
-  .next-content[contenteditable="true"]:focus {
+  .next-item.done .next-text {
+    color: var(--ink-muted);
+    text-decoration: line-through;
+    text-decoration-color: var(--ink-faint);
+    font-weight: 400;
+  }
+  .next-text[contenteditable="true"]:focus {
     background: var(--surface);
     border-radius: 3px;
     padding: 1px 3px;
   }
-  .next-content:empty::before {
-    content: '다음 할 일 입력 →';
+  .next-text:empty::before {
+    content: '할 일 입력…';
     color: var(--ink-faint);
     font-weight: 400;
   }
 
-  .next-hint {
+  .next-meta {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .next-time {
+    font-family: 'JetBrains Mono', monospace;
     font-size: 10.5px;
+    color: var(--green);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .next-del {
+    width: 18px; height: 18px;
+    border: none;
+    background: transparent;
+    color: var(--ink-faint);
+    cursor: pointer;
+    border-radius: 3px;
+    display: grid; place-items: center;
+    font-size: 12px;
+    opacity: 0;
+    transition: all .12s;
+  }
+  .next-item:hover .next-del { opacity: 0.7; }
+  .next-del:hover {
+    opacity: 1 !important;
+    color: var(--red);
+    background: var(--red-soft);
+  }
+
+  .next-add {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: transparent;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius);
     color: var(--ink-muted);
-    margin-top: 3px;
-    padding-left: 30px;
+    font-family: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all .12s;
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .next-add:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+
+  .next-empty {
+    font-size: 12px;
+    color: var(--ink-faint);
+    padding: 4px 0;
   }
 
   /* 액션 셀 */
   .col-actions {
     display: flex; gap: 2px;
-    opacity: 0.35;
-    transition: opacity .12s;
+    flex-shrink: 0;
   }
-  .check-item:hover .col-actions { opacity: 1; }
   .icon-btn {
     width: 26px; height: 26px;
     border: none; background: none;
@@ -849,7 +941,7 @@
       <span class="add-row-label">+ 새 업무</span>
       <select id="new-cat-select"></select>
       <input type="text" class="site-input" id="new-site-input" placeholder="현장명">
-      <input type="text" class="task-input" id="new-task-input" placeholder="다음 할 일 (선택)">
+      <input type="text" class="task-input" id="new-task-input" placeholder="다음 할 일 (선택, 나중에 카드에서 더 추가 가능)">
       <button class="btn btn-sm btn-primary" id="btn-add-task">추가</button>
     </div>
 
@@ -982,11 +1074,52 @@
     if (!state.weekOrder || state.weekOrder.length === 0) seedData();
     if (!state.currentWeek) state.currentWeek = state.weekOrder[state.weekOrder.length - 1];
 
-    // 이전 버전(next 필드만 있던) → log[] 구조로 마이그레이션
+    // 마이그레이션: next(문자열) + log(문자열[]) → nexts({id, text, done, doneAt}[])
+    // 그리고 완료된 항목은 모두 memo로 합쳐서, nexts는 "미완료 할 일"만 담음
     state.weekOrder.forEach(w => {
       (state.weeks[w] || []).forEach(t => {
-        if (!Array.isArray(t.log)) t.log = [];
-        if (t.next === undefined) t.next = '';
+        // 과거 완료 항목들을 모아서 memo에 붙일 라인으로 만듦
+        const completedLines = [];
+
+        // 이전 log (문자열 배열)
+        if (Array.isArray(t.log)) {
+          t.log.forEach(entry => {
+            const text = (typeof entry === 'string') ? entry : (entry && entry.text) || '';
+            if (text) completedLines.push(`✓ ${text}`);
+          });
+        }
+
+        // 기존 nexts 중 done:true인 것들 (이전 버전 저장 데이터 호환)
+        if (Array.isArray(t.nexts)) {
+          t.nexts.forEach(n => {
+            if (n && n.done && n.text) {
+              const stamp = n.doneAt ? formatDoneAt(n.doneAt) : null;
+              completedLines.push(stamp ? `✓ [${stamp}] ${n.text}` : `✓ ${n.text}`);
+            }
+          });
+          // nexts는 미완료만 남기고, 각 항목은 새 스키마로 정규화
+          t.nexts = t.nexts.filter(n => n && !n.done).map(n => ({
+            id: n.id || uid(),
+            text: n.text || ''
+          }));
+        } else {
+          t.nexts = [];
+        }
+
+        // 이전 next (문자열 1개, 미완료) → nexts 앞에 추가
+        if (typeof t.next === 'string' && t.next.trim()) {
+          t.nexts.unshift({ id: uid(), text: t.next.trim() });
+        }
+
+        // 완료된 줄들을 memo 뒤에 병합
+        if (completedLines.length > 0) {
+          const existing = (t.memo || '').trimEnd();
+          t.memo = existing ? (existing + '\n' + completedLines.join('\n')) : completedLines.join('\n');
+        }
+
+        // 구 필드 정리
+        delete t.next;
+        delete t.log;
       });
     });
   }
@@ -1147,16 +1280,23 @@
     const order = Object.keys(data);
     state.weeks = {};
     order.forEach(w => {
-      state.weeks[w] = data[w].map(row => ({
-        id: uid(),
-        cat: row[0] || '기타',
-        site: row[1],
-        memo: row[2] || '',
-        next: row[3] || '',
-        done: row[4] === true,
-        hold: row[4] === null,
-        log: []
-      }));
+      state.weeks[w] = data[w].map(row => {
+        const nextText = row[3] || '';
+        const wasDone = row[4] === true;
+        const nexts = [];
+        if (nextText) {
+          nexts.push({ id: uid(), text: nextText });
+        }
+        return {
+          id: uid(),
+          cat: row[0] || '기타',
+          site: row[1],
+          memo: row[2] || '',
+          nexts,
+          done: wasDone,
+          hold: row[4] === null
+        };
+      });
     });
     state.weekOrder = order;
     save();
@@ -1180,10 +1320,16 @@
     const all = getAllTasks();
     document.getElementById('stat-total').textContent = all.length;
 
+    // 완료 판정 헬퍼: t.done이 true거나, nexts가 비고 memo에 기록이 있음
+    const isAllDone = (t) => {
+      const nx = Array.isArray(t.nexts) ? t.nexts : [];
+      return t.done || (nx.length === 0 && (t.memo && t.memo.trim().length > 0));
+    };
+
     const lastWeek = state.weekOrder[state.weekOrder.length - 1];
     const lastTasks = state.weeks[lastWeek] || [];
-    const open = lastTasks.filter(t => !t.done && !t.hold);
-    const done = lastTasks.filter(t => t.done);
+    const open = lastTasks.filter(t => !isAllDone(t) && !t.hold);
+    const done = lastTasks.filter(t => isAllDone(t));
     document.getElementById('stat-thisweek').textContent = open.length;
     document.getElementById('stat-thisweek-label').textContent = lastWeek || '—';
     document.getElementById('stat-done').textContent = done.length;
@@ -1195,13 +1341,19 @@
     if (open.length === 0) {
       todoEl.innerHTML = '<div class="empty">이번주 남은 일이 없습니다</div>';
     } else {
-      todoEl.innerHTML = open.map(t => `
-        <li>
-          <span class="cat-tag" style="${catStyle(t.cat)}">${escapeHtml(t.cat)}</span>
-          <span class="site">${escapeHtml(t.site)}</span>
-          <span class="task">${escapeHtml(t.next || t.memo || '—')}</span>
-        </li>
-      `).join('');
+      todoEl.innerHTML = open.map(t => {
+        const nx = Array.isArray(t.nexts) ? t.nexts : [];
+        const firstText = nx.length > 0 ? nx[0].text : '';
+        const moreCount = nx.length > 1 ? ` <span style="color:var(--ink-faint);">+${nx.length-1}</span>` : '';
+        const taskText = firstText || t.memo || '—';
+        return `
+          <li>
+            <span class="cat-tag" style="${catStyle(t.cat)}">${escapeHtml(t.cat)}</span>
+            <span class="site">${escapeHtml(t.site)}</span>
+            <span class="task">${escapeHtml(taskText)}${moreCount}</span>
+          </li>
+        `;
+      }).join('');
     }
 
     const holdEl = document.getElementById('hold-items');
@@ -1268,13 +1420,16 @@
     const search = (document.getElementById('search-input').value || '').toLowerCase();
 
     const filtered = tasks.filter(t => {
-      const allDone = t.done || (!t.next && t.log.length > 0);
+      const nexts = Array.isArray(t.nexts) ? t.nexts : [];
+      // "완료" 정의: t.done이 true거나, 할 일이 비었고 진행 내역이 있음
+      const allDone = t.done || (nexts.length === 0 && (t.memo && t.memo.trim().length > 0));
       if (state.filter === 'open' && (allDone || t.hold)) return false;
       if (state.filter === 'done' && !allDone) return false;
       if (state.filter === 'hold' && !t.hold) return false;
       if (state.catFilter !== 'all' && t.cat !== state.catFilter) return false;
       if (search) {
-        const blob = `${t.site} ${t.memo} ${t.next} ${t.cat} ${(t.log||[]).join(' ')}`.toLowerCase();
+        const nextBlob = nexts.map(n => n.text).join(' ');
+        const blob = `${t.site} ${t.memo} ${nextBlob} ${t.cat}`.toLowerCase();
         if (!blob.includes(search)) return false;
       }
       return true;
@@ -1286,35 +1441,48 @@
     }
 
     body.innerHTML = filtered.map(t => {
-      // "all-done" = 완료 표시했거나 / 다음 할 일이 비어있고 로그가 있음
-      const allDone = t.done;
-      const logHtml = (t.log && t.log.length > 0)
-        ? `<div class="completed-log">${t.log.map(e => `<span class="log-entry"><span class="log-check">✓</span>${escapeHtml(e)}</span>`).join('')}</div>`
-        : '';
+      const nexts = Array.isArray(t.nexts) ? t.nexts : [];
+      // nexts는 이제 "미완료"만 담김 (체크하면 memo로 이동)
+      const hasNoNexts = nexts.length === 0;
+      const allDone = t.done || (hasNoNexts && (t.memo && t.memo.trim().length > 0));
+
+      const nextsHtml = hasNoNexts
+        ? '<div class="next-empty">등록된 할 일이 없습니다</div>'
+        : `<div class="next-list">
+            ${nexts.map(n => `
+              <div class="next-item" data-next-id="${n.id}">
+                <input type="checkbox" class="next-check" data-action="next-toggle" data-id="${t.id}" data-next-id="${n.id}">
+                <div class="next-text" contenteditable="true" data-field="next-text" data-id="${t.id}" data-next-id="${n.id}">${escapeHtml(n.text)}</div>
+                <div class="next-meta">
+                  <button class="next-del" data-action="next-del" data-id="${t.id}" data-next-id="${n.id}" title="삭제">✕</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>`;
 
       return `
         <div class="check-item ${allDone ? 'all-done' : ''} ${t.hold ? 'hold' : ''}" data-id="${t.id}">
-          <div class="col-cat">
-            <span class="cat-tag" style="${catStyle(t.cat)}" data-action="cat" data-id="${t.id}">${escapeHtml(t.cat)}</span>
+          <div class="card-row-top">
+            <div class="col-cat">
+              <span class="cat-tag" style="${catStyle(t.cat)}" data-action="cat" data-id="${t.id}">${escapeHtml(t.cat)}</span>
+            </div>
+            <div class="col-actions">
+              <button class="icon-btn" data-action="hold" data-id="${t.id}" title="${t.hold?'보류 해제':'보류 처리'}">${t.hold?'↺':'⏸'}</button>
+              <button class="icon-btn" data-action="done-toggle" data-id="${t.id}" title="${allDone?'완료 해제':'전체 완료 처리'}">${allDone?'↶':'✓'}</button>
+              <button class="icon-btn danger" data-action="del" data-id="${t.id}" title="삭제">✕</button>
+            </div>
           </div>
-          <div class="col-site">
+          <div class="card-row-site col-site">
             <div class="site" contenteditable="true" data-field="site" data-id="${t.id}">${escapeHtml(t.site)}</div>
           </div>
-          <div class="col-memo">
+          <div class="card-row-memo col-memo">
+            <span class="card-section-label">진행 내역</span>
             <div class="memo-history" contenteditable="true" data-field="memo" data-id="${t.id}">${escapeHtml(t.memo)}</div>
-            ${logHtml}
           </div>
-          <div class="col-next">
-            <div class="next-box">
-              <button class="next-btn" data-action="complete" data-id="${t.id}" title="${allDone ? '이미 완료' : '완료하고 다음으로'}">${allDone ? '✓' : '☐'}</button>
-              <div class="next-content" contenteditable="true" data-field="next" data-id="${t.id}">${escapeHtml(t.next)}</div>
-            </div>
-            ${!allDone && t.next ? '<div class="next-hint">체크하면 완료 기록되고 새 할 일 입력</div>' : ''}
-          </div>
-          <div class="col-actions">
-            <button class="icon-btn" data-action="hold" data-id="${t.id}" title="${t.hold?'보류 해제':'보류 처리'}">${t.hold?'↺':'⏸'}</button>
-            <button class="icon-btn" data-action="done-toggle" data-id="${t.id}" title="${allDone?'완료 해제':'전체 완료 처리'}">${allDone?'↶':'✓'}</button>
-            <button class="icon-btn danger" data-action="del" data-id="${t.id}" title="삭제">✕</button>
+          <div class="card-row-next col-next">
+            <span class="card-section-label">다음 할 일</span>
+            ${nextsHtml}
+            <button class="next-add" data-action="next-add" data-id="${t.id}" style="margin-top:4px;">+ 할 일 추가</button>
           </div>
         </div>
       `;
@@ -1324,7 +1492,10 @@
       el.addEventListener('click', (e) => {
         const action = el.dataset.action;
         const id = el.dataset.id;
-        if (action === 'complete') completeNext(id);
+        const nextId = el.dataset.nextId;
+        if (action === 'next-toggle') toggleNextDone(id, nextId, el.checked);
+        else if (action === 'next-add') addNextItem(id);
+        else if (action === 'next-del') deleteNextItem(id, nextId);
         else if (action === 'done-toggle') toggleDone(id);
         else if (action === 'hold') toggleHold(id);
         else if (action === 'del') deleteTask(id);
@@ -1337,14 +1508,27 @@
         const id = e.target.dataset.id;
         const field = e.target.dataset.field;
         const task = state.weeks[state.currentWeek].find(t => t.id === id);
-        if (task) {
+        if (!task) return;
+        if (field === 'next-text') {
+          const nextId = e.target.dataset.nextId;
+          const n = (task.nexts || []).find(x => x.id === nextId);
+          if (n) {
+            const newText = e.target.innerText.trim();
+            if (newText !== n.text) {
+              n.text = newText;
+              save();
+              renderDashboard();
+            }
+          }
+        } else if (field === 'site' || field === 'memo') {
           task[field] = e.target.innerText.trim();
           save();
           renderDashboard();
         }
       });
       el.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey && e.target.dataset.field !== 'memo') {
+        const field = e.target.dataset.field;
+        if (e.key === 'Enter' && !e.shiftKey && field !== 'memo') {
           e.preventDefault();
           e.target.blur();
         }
@@ -1377,7 +1561,11 @@
 
     grid.innerHTML = sites.map(([name, entries]) => {
       const latest = entries[entries.length - 1];
-      const openCount = entries.filter(e => !e.done && !e.hold).length;
+      const isEntryDone = (e) => {
+        const nx = Array.isArray(e.nexts) ? e.nexts : [];
+        return e.done || (nx.length === 0 && (e.memo && e.memo.trim().length > 0));
+      };
+      const openCount = entries.filter(e => !isEntryDone(e) && !e.hold).length;
       return `
         <div class="site-card">
           <div class="site-head">
@@ -1392,18 +1580,20 @@
           </div>
           <ul class="site-timeline">
             ${entries.map(e => {
-              const status = e.done ? 'done' : e.hold ? 'hold' : 'open';
-              const statusSym = e.done ? '✓' : e.hold ? '⏸' : '○';
-              const nextTxt = e.next ? `<br><span style="color:var(--accent); font-weight:500;">→ ${escapeHtml(e.next)}</span>` : '';
-              const logTxt = (e.log && e.log.length > 0) ? `<br><span style="color:var(--green); font-size:11px;">✓ ${e.log.map(l => escapeHtml(l)).join(' / ')}</span>` : '';
+              const allDone = isEntryDone(e);
+              const status = allDone ? 'done' : e.hold ? 'hold' : 'open';
+              const statusSym = allDone ? '✓' : e.hold ? '⏸' : '○';
+              const nx = Array.isArray(e.nexts) ? e.nexts : [];
+              const pendingTxt = nx.length > 0
+                ? `<br><span style="color:var(--accent); font-weight:500;">→ ${nx.map(n => escapeHtml(n.text)).join(' / ')}</span>`
+                : '';
               return `
                 <li>
                   <span class="week-tag">${escapeHtml(e.week)}</span>
                   <span class="entry">
                     <span class="status-ind ${status}">${statusSym}</span>
                     ${escapeHtml(e.memo || '(내용없음)')}
-                    ${logTxt}
-                    ${nextTxt}
+                    ${pendingTxt}
                   </span>
                 </li>
               `;
@@ -1422,34 +1612,76 @@
     return all;
   }
 
-  // === 핵심: 다음 할 일 완료 → 로그로 이동 ===
-  function completeNext(id) {
-    const t = state.weeks[state.currentWeek].find(x => x.id === id);
-    if (!t) return;
+  // === 날짜 포맷팅 ===
+  function formatDoneAt(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    const now = new Date();
+    const sameYear = d.getFullYear() === now.getFullYear();
+    if (sameYear) {
+      return `${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    return `${d.getFullYear()}.${pad(d.getMonth()+1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
 
-    if (t.done) {
-      toast('이미 완료된 업무입니다');
+  // === 다음 할 일 관리 ===
+  function toggleNextDone(taskId, nextId, checked) {
+    const t = state.weeks[state.currentWeek].find(x => x.id === taskId);
+    if (!t || !Array.isArray(t.nexts)) return;
+    const n = t.nexts.find(x => x.id === nextId);
+    if (!n) return;
+    if (!checked) return; // 체크 해제는 무시 (이미 이동됨)
+
+    // 체크한 항목을 진행 내역(memo)으로 이동
+    const now = new Date();
+    const stamp = formatDoneAt(now.toISOString());
+    const text = (n.text || '').trim();
+    if (!text) {
+      // 빈 항목은 그냥 제거
+      t.nexts = t.nexts.filter(x => x.id !== nextId);
+      save();
+      render();
       return;
     }
-
-    if (!t.next || !t.next.trim()) {
-      toast('다음 할 일을 먼저 입력해주세요');
-      return;
-    }
-
-    // 다음 할 일을 완료 로그로 이동
-    if (!Array.isArray(t.log)) t.log = [];
-    t.log.push(t.next.trim());
-    t.next = '';
+    const line = `✓ [${stamp}] ${text}`;
+    t.memo = t.memo ? (t.memo.trimEnd() + '\n' + line) : line;
+    t.nexts = t.nexts.filter(x => x.id !== nextId);
     save();
     render();
-    toast('✓ 완료 기록됨. 다음 할 일 입력');
+    toast('✓ 진행 내역으로 이동됨');
+  }
 
-    // 방금 해당 카드의 next 입력란에 포커스
+  function addNextItem(taskId, initialText = '') {
+    const t = state.weeks[state.currentWeek].find(x => x.id === taskId);
+    if (!t) return;
+    if (!Array.isArray(t.nexts)) t.nexts = [];
+    const newItem = { id: uid(), text: initialText };
+    t.nexts.push(newItem);
+    save();
+    render();
+    // 방금 추가한 항목에 포커스
     setTimeout(() => {
-      const el = document.querySelector(`.next-content[data-id="${id}"]`);
-      if (el) el.focus();
-    }, 100);
+      const el = document.querySelector(`.next-text[data-next-id="${newItem.id}"]`);
+      if (el) {
+        el.focus();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        range.collapse(false);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    }, 50);
+  }
+
+  function deleteNextItem(taskId, nextId) {
+    const t = state.weeks[state.currentWeek].find(x => x.id === taskId);
+    if (!t || !Array.isArray(t.nexts)) return;
+    t.nexts = t.nexts.filter(n => n.id !== nextId);
+    save();
+    render();
   }
 
   function toggleDone(id) {
@@ -1482,13 +1714,16 @@
     const task = taskEl.value.trim();
     if (!site) { toast('현장명을 입력해주세요'); siteEl.focus(); return; }
 
+    const nexts = [];
+    if (task) {
+      nexts.push({ id: uid(), text: task });
+    }
     const newTask = {
       id: uid(),
       cat, site,
       memo: '',
-      next: task,
-      done: false, hold: false,
-      log: []
+      nexts,
+      done: false, hold: false
     };
     state.weeks[state.currentWeek].unshift(newTask);
     save();

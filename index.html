@@ -7,6 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- Firebase SDK (compat) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <style>
   :root {
     --bg: #f7f7f5;
@@ -1055,14 +1058,62 @@
   let tempColor = null;
   let editingTaskId = null;
 
-  function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
-  function load() {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
+  // ============================================================
+  // ⚠️ Firebase 설정 - 본인 firebaseConfig로 교체하세요
+  // Firebase Console → 프로젝트 설정 → 내 앱 → SDK 설정 및 구성
+  // ============================================================
+  const firebaseConfig = {
+    apiKey: "AIzaSyBVnFyC-XV9nMyjtUmPy9MBM5Lf6FszR8M",
+    authDomain: "weekly-bs.firebaseapp.com",
+    projectId: "weekly-bs",
+    storageBucket: "weekly-bs.firebasestorage.app",
+    messagingSenderId: "524505371308",
+    appId: "1:524505371308:web:f57ac5b89dc8d10733c509",
+    measurementId: "G-N91R0N58X1"
+  };
+  // ============================================================
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const DOC_REF = db.collection('app_state').doc('main'); // 모든 데이터를 문서 1개에 저장
+
+  // 저장 디바운스 (연속 저장 방지)
+  let saveTimer = null;
+  let isApplyingRemote = false; // 원격 변경 적용 중에는 save 안 함
+
+  function save() {
+    if (isApplyingRemote) return;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
       try {
-        const parsed = JSON.parse(raw);
+        // weeks 객체에 빈 키가 있을 수 있어 정리
+        const payload = {
+          categories: state.categories,
+          weeks: state.weeks,
+          weekOrder: state.weekOrder,
+          currentWeek: state.currentWeek,
+          filter: state.filter,
+          catFilter: state.catFilter,
+          updatedAt: new Date().toISOString()
+        };
+        await DOC_REF.set(payload);
+      } catch(e) {
+        console.error('Firebase 저장 실패:', e);
+        alert('저장 실패: ' + e.message);
+      }
+    }, 300);
+  }
+
+  async function load() {
+    try {
+      const snap = await DOC_REF.get();
+      if (snap.exists) {
+        const parsed = snap.data();
         state = { ...state, ...parsed };
-      } catch(e) {}
+      }
+    } catch(e) {
+      console.error('Firebase 로드 실패:', e);
+      alert('로드 실패: ' + e.message + '\n\nFirestore 활성화 및 보안 규칙을 확인하세요.');
     }
     // 카테고리 포맷 호환
     Object.keys(state.categories).forEach(k => {
@@ -1910,8 +1961,31 @@
   document.getElementById('today-date').textContent =
     `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}`;
 
-  load();
-  render();
+  // 비동기 로드 + 실시간 동기화
+  (async () => {
+    await load();
+    render();
+
+    // 실시간 동기화: 다른 기기에서 변경되면 자동 반영
+    DOC_REF.onSnapshot((snap) => {
+      if (!snap.exists) return;
+      const data = snap.data();
+      // 자기 자신이 방금 저장한 것은 무시 (updatedAt 비교는 생략, 중요한 건 다른 기기에서 온 것)
+      isApplyingRemote = true;
+      state = { ...state, ...data };
+      // 카테고리 포맷 호환
+      Object.keys(state.categories || {}).forEach(k => {
+        if (typeof state.categories[k] === 'string') {
+          const c = state.categories[k];
+          state.categories[k] = { color: c, bg: c + '22', ink: c };
+        }
+      });
+      render();
+      isApplyingRemote = false;
+    }, (err) => {
+      console.error('실시간 동기화 오류:', err);
+    });
+  })();
 </script>
 </body>
 </html>

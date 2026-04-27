@@ -489,6 +489,56 @@
     background: var(--surface);
   }
 
+  /* 진행 내역 - 완료 항목 칩 (되돌리기 가능) */
+  .done-items {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+  .done-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 8px;
+    background: #e8f4ea;
+    border-left: 3px solid #4a9d5f;
+    border-radius: 4px;
+    font-size: 12.5px;
+    color: #2d6a3f;
+  }
+  .done-chip .done-mark {
+    font-weight: 700;
+    color: #4a9d5f;
+  }
+  .done-chip .done-stamp {
+    font-size: 11px;
+    color: #6a8d77;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .done-chip .done-text {
+    flex: 1;
+    word-break: break-word;
+  }
+  .done-chip .done-undo {
+    background: transparent;
+    border: 1px solid #b5d4bd;
+    color: #4a9d5f;
+    width: 22px;
+    height: 22px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .done-chip .done-undo:hover {
+    background: #4a9d5f;
+    color: white;
+  }
+
   /* 다음 할 일 셀 (여러 체크박스 리스트) */
   .col-next { min-width: 0; }
   .next-list {
@@ -702,6 +752,81 @@
   .status-ind.done { color: var(--green); }
   .status-ind.hold { color: var(--amber); }
   .status-ind.open { color: var(--ink-faint); }
+
+  /* 현장별 entry - 체크 가능 UI */
+  .site-entry-row {
+    display: flex; gap: 12px; width: 100%;
+    align-items: flex-start;
+  }
+  .site-timeline .entry-content {
+    flex: 1; line-height: 1.5; color: var(--ink-soft);
+  }
+  .site-timeline .entry-text {
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .site-timeline .entry-memo {
+    color: var(--ink-soft);
+    font-size: 12px;
+    margin-top: 3px;
+    white-space: pre-wrap;
+  }
+  .site-nexts {
+    display: flex; flex-direction: column; gap: 3px;
+    margin-top: 6px;
+  }
+  .site-next-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 3px 6px;
+    background: #fff5e0;
+    border-left: 3px solid var(--amber);
+    border-radius: 3px;
+    font-size: 12px;
+    color: #6a5d2c;
+    cursor: pointer;
+  }
+  .site-next-item input[type="checkbox"] {
+    cursor: pointer;
+    margin: 0;
+  }
+  .site-next-item:hover { background: #fcecc8; }
+  .site-dones {
+    display: flex; flex-direction: column; gap: 3px;
+    margin-top: 6px;
+  }
+  .site-done-chip {
+    display: flex; align-items: center; gap: 6px;
+    padding: 3px 6px;
+    background: #e8f4ea;
+    border-left: 3px solid #4a9d5f;
+    border-radius: 3px;
+    font-size: 12px;
+    color: #2d6a3f;
+  }
+  .site-done-chip .done-mark { font-weight: 700; color: #4a9d5f; }
+  .site-done-chip .done-stamp {
+    font-size: 10.5px; color: #6a8d77;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .site-done-chip .done-text { flex: 1; word-break: break-word; }
+  .site-done-chip .done-undo {
+    background: transparent; border: 1px solid #b5d4bd;
+    color: #4a9d5f; width: 20px; height: 20px;
+    border-radius: 3px; cursor: pointer; font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .site-done-chip .done-undo:hover { background: #4a9d5f; color: white; }
+
+  /* 카테고리 태그 - 현장별 뷰에서 hover 시 클릭 가능 표시 */
+  .site-head .cat-tag[data-action="cat"] {
+    cursor: pointer;
+    transition: filter 0.15s;
+  }
+  .site-head .cat-tag[data-action="cat"]:hover {
+    filter: brightness(0.95);
+    box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
+  }
 
   /* === MODAL === */
   .modal-overlay {
@@ -1586,7 +1711,8 @@
           </div>
           <div class="card-row-memo col-memo">
             <span class="card-section-label">진행 내역</span>
-            <div class="memo-history" contenteditable="true" data-field="memo" data-id="${t.id}">${escapeHtml(t.memo)}</div>
+            ${renderDoneItems(t)}
+            <div class="memo-history" contenteditable="true" data-field="memo" data-id="${t.id}">${escapeHtml(getFreeMemo(t.memo))}</div>
           </div>
           <div class="card-row-next col-next">
             <span class="card-section-label">다음 할 일</span>
@@ -1609,6 +1735,7 @@
         else if (action === 'hold') toggleHold(id);
         else if (action === 'del') deleteTask(id);
         else if (action === 'cat') showCatPopup(e, id);
+        else if (action === 'undo-done') undoDoneItem(id, el.dataset.lineIdx);
       });
     });
 
@@ -1616,8 +1743,9 @@
       el.addEventListener('blur', (e) => {
         const id = e.target.dataset.id;
         const field = e.target.dataset.field;
-        const task = state.weeks[state.currentWeek].find(t => t.id === id);
-        if (!task) return;
+        const found = findTask(id);
+        if (!found) return;
+        const task = found.task;
         if (field === 'next-text') {
           const nextId = e.target.dataset.nextId;
           const n = (task.nexts || []).find(x => x.id === nextId);
@@ -1629,8 +1757,18 @@
               renderDashboard();
             }
           }
-        } else if (field === 'site' || field === 'memo') {
-          task[field] = e.target.innerText.trim();
+        } else if (field === 'site') {
+          task.site = e.target.innerText.trim();
+          save();
+          renderDashboard();
+        } else if (field === 'memo') {
+          // 자유 메모만 입력받고, 기존 ✓ 라인들과 합쳐서 저장
+          const freeMemo = e.target.innerText.trim();
+          const doneLines = getDoneLines(task.memo);
+          const combined = doneLines.length > 0
+            ? doneLines.join('\n') + (freeMemo ? '\n' + freeMemo : '')
+            : freeMemo;
+          task.memo = combined;
           save();
           renderDashboard();
         }
@@ -1678,7 +1816,7 @@
       return `
         <div class="site-card">
           <div class="site-head">
-            <h3>${escapeHtml(name)} <span class="cat-tag" style="${catStyle(latest.cat)}">${escapeHtml(latest.cat)}</span></h3>
+            <h3>${escapeHtml(name)} <span class="cat-tag" style="${catStyle(latest.cat)}" data-action="cat" data-id="${latest.id}" title="카테고리 변경">${escapeHtml(latest.cat)}</span></h3>
             <div class="site-meta">
               <span>${entries.length}회 기록</span>
               <span>·</span>
@@ -1693,17 +1831,60 @@
               const status = allDone ? 'done' : e.hold ? 'hold' : 'open';
               const statusSym = allDone ? '✓' : e.hold ? '⏸' : '○';
               const nx = Array.isArray(e.nexts) ? e.nexts : [];
-              const pendingTxt = nx.length > 0
-                ? `<br><span style="color:var(--accent); font-weight:500;">→ ${nx.map(n => escapeHtml(n.text)).join(' / ')}</span>`
+
+              // 다음 할 일 (체크 가능)
+              const pendingHtml = nx.length > 0 ? `
+                <div class="site-nexts">
+                  ${nx.map(n => `
+                    <label class="site-next-item">
+                      <input type="checkbox" data-action="next-toggle" data-id="${e.id}" data-next-id="${n.id}">
+                      <span>${escapeHtml(n.text)}</span>
+                    </label>
+                  `).join('')}
+                </div>
+              ` : '';
+
+              // 완료 항목 (memo의 ✓ 라인) - 되돌리기 가능
+              const doneLines = [];
+              if (e.memo) {
+                e.memo.split('\n').forEach((line, idx) => {
+                  const trimmed = line.trim();
+                  if (trimmed.startsWith('✓')) {
+                    const m = trimmed.match(/^✓\s*(?:\[([^\]]+)\]\s*)?(.+)$/);
+                    if (m) doneLines.push({ idx, stamp: m[1] || '', text: m[2] || '' });
+                  }
+                });
+              }
+              const doneHtml = doneLines.length > 0 ? `
+                <div class="site-dones">
+                  ${doneLines.map(d => `
+                    <div class="site-done-chip">
+                      <span class="done-mark">✓</span>
+                      ${d.stamp ? `<span class="done-stamp">[${escapeHtml(d.stamp)}]</span>` : ''}
+                      <span class="done-text">${escapeHtml(d.text)}</span>
+                      <button class="done-undo" data-action="undo-done" data-id="${e.id}" data-line-idx="${d.idx}" title="되돌리기">↶</button>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : '';
+
+              // 자유 메모(✓ 라인 외)
+              const freeMemo = e.memo
+                ? e.memo.split('\n').filter(l => !l.trim().startsWith('✓')).join('\n').trim()
                 : '';
+
               return `
                 <li>
-                  <span class="week-tag">${escapeHtml(e.week)}</span>
-                  <span class="entry">
+                  <div class="site-entry-row">
+                    <span class="week-tag">${escapeHtml(e.week)}</span>
                     <span class="status-ind ${status}">${statusSym}</span>
-                    ${escapeHtml(e.memo || '(내용없음)')}
-                    ${pendingTxt}
-                  </span>
+                    <span class="entry-content">
+                      ${e.text ? `<span class="entry-text">${escapeHtml(e.text)}</span>` : ''}
+                      ${freeMemo ? `<div class="entry-memo">${escapeHtml(freeMemo)}</div>` : ''}
+                      ${doneHtml}
+                      ${pendingHtml}
+                    </span>
+                  </div>
                 </li>
               `;
             }).join('')}
@@ -1711,6 +1892,17 @@
         </div>
       `;
     }).join('');
+
+    // 액션 핸들러 등록
+    grid.querySelectorAll('[data-action]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        const action = el.dataset.action;
+        const id = el.dataset.id;
+        if (action === 'next-toggle') toggleNextDone(id, el.dataset.nextId, el.checked);
+        else if (action === 'undo-done') undoDoneItem(id, el.dataset.lineIdx);
+        else if (action === 'cat') showCatPopup(e, id);
+      });
+    });
   }
 
   function getAllTasks() {
@@ -1736,9 +1928,107 @@
   }
 
   // === 다음 할 일 관리 ===
+
+  // task를 어느 주차에서든 찾는 헬퍼 (현장별 뷰에서도 사용)
+  // 반환: { task, week } 또는 null
+  function findTask(taskId, weekHint = null) {
+    if (weekHint && state.weeks[weekHint]) {
+      const t = state.weeks[weekHint].find(x => x.id === taskId);
+      if (t) return { task: t, week: weekHint };
+    }
+    // 모든 주차에서 검색
+    for (const w of state.weekOrder) {
+      const arr = state.weeks[w] || [];
+      const t = arr.find(x => x.id === taskId);
+      if (t) return { task: t, week: w };
+    }
+    return null;
+  }
+
+  // 진행 내역(memo)에서 ✓ 라인을 제외한 자유 메모만 추출
+  function getFreeMemo(memo) {
+    if (!memo) return '';
+    return memo.split('\n')
+      .filter(l => !l.trim().startsWith('✓'))
+      .join('\n')
+      .trim();
+  }
+
+  // ✓ 라인들만 추출 (그대로 보존)
+  function getDoneLines(memo) {
+    if (!memo) return [];
+    return memo.split('\n').filter(l => l.trim().startsWith('✓'));
+  }
+
+  // 진행 내역(memo)에서 완료 항목들을 추출하여 되돌리기 가능한 칩으로 렌더링
+  function renderDoneItems(t) {
+    if (!t.memo) return '';
+    const lines = t.memo.split('\n');
+    const doneItems = [];
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('✓')) {
+        // "✓ [날짜] 내용" 또는 "✓ 내용"에서 날짜와 내용 분리
+        const m = trimmed.match(/^✓\s*(?:\[([^\]]+)\]\s*)?(.+)$/);
+        if (m) {
+          const stamp = m[1] || '';
+          const text = m[2] || '';
+          doneItems.push({ idx, stamp, text, fullLine: line });
+        }
+      }
+    });
+    if (doneItems.length === 0) return '';
+    return `
+      <div class="done-items">
+        ${doneItems.map(d => `
+          <div class="done-chip">
+            <span class="done-mark">✓</span>
+            ${d.stamp ? `<span class="done-stamp">[${escapeHtml(d.stamp)}]</span>` : ''}
+            <span class="done-text">${escapeHtml(d.text)}</span>
+            <button class="done-undo" data-action="undo-done" data-id="${t.id}" data-line-idx="${d.idx}" title="되돌리기 (다시 할 일로 이동)">↶</button>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  // 완료 항목을 다시 할 일로 되돌리기
+  function undoDoneItem(taskId, lineIdx) {
+    const found = findTask(taskId);
+    if (!found) return;
+    const t = found.task;
+    if (!t.memo) return;
+
+    const lines = t.memo.split('\n');
+    const idx = parseInt(lineIdx);
+    if (isNaN(idx) || idx < 0 || idx >= lines.length) return;
+
+    const line = lines[idx].trim();
+    if (!line.startsWith('✓')) return;
+
+    // 텍스트 추출
+    const m = line.match(/^✓\s*(?:\[[^\]]+\]\s*)?(.+)$/);
+    const text = m ? m[1].trim() : line.replace(/^✓\s*/, '').trim();
+    if (!text) return;
+
+    // memo에서 해당 라인 제거
+    lines.splice(idx, 1);
+    t.memo = lines.join('\n');
+
+    // nexts에 다시 추가
+    if (!Array.isArray(t.nexts)) t.nexts = [];
+    t.nexts.push({ id: uid(), text });
+
+    save();
+    render();
+    toast('할 일로 되돌렸습니다');
+  }
+
   function toggleNextDone(taskId, nextId, checked) {
-    const t = state.weeks[state.currentWeek].find(x => x.id === taskId);
-    if (!t || !Array.isArray(t.nexts)) return;
+    const found = findTask(taskId);
+    if (!found) return;
+    const t = found.task;
+    if (!Array.isArray(t.nexts)) return;
     const n = t.nexts.find(x => x.id === nextId);
     if (!n) return;
     if (!checked) return; // 체크 해제는 무시 (이미 이동됨)
@@ -1763,8 +2053,9 @@
   }
 
   function addNextItem(taskId, initialText = '') {
-    const t = state.weeks[state.currentWeek].find(x => x.id === taskId);
-    if (!t) return;
+    const found = findTask(taskId);
+    if (!found) return;
+    const t = found.task;
     if (!Array.isArray(t.nexts)) t.nexts = [];
     const newItem = { id: uid(), text: initialText };
     t.nexts.push(newItem);
@@ -1786,23 +2077,25 @@
   }
 
   function deleteNextItem(taskId, nextId) {
-    const t = state.weeks[state.currentWeek].find(x => x.id === taskId);
-    if (!t || !Array.isArray(t.nexts)) return;
-    t.nexts = t.nexts.filter(n => n.id !== nextId);
+    const found = findTask(taskId);
+    if (!found || !Array.isArray(found.task.nexts)) return;
+    found.task.nexts = found.task.nexts.filter(n => n.id !== nextId);
     save();
     render();
   }
 
   function toggleDone(id) {
-    const t = state.weeks[state.currentWeek].find(x => x.id === id);
-    if (!t) return;
+    const found = findTask(id);
+    if (!found) return;
+    const t = found.task;
     t.done = !t.done;
     if (t.done) t.hold = false;
     save(); render();
   }
   function toggleHold(id) {
-    const t = state.weeks[state.currentWeek].find(x => x.id === id);
-    if (!t) return;
+    const found = findTask(id);
+    if (!found) return;
+    const t = found.task;
     t.hold = !t.hold;
     if (t.hold) t.done = false;
     save(); render();
@@ -1810,7 +2103,9 @@
   }
   function deleteTask(id) {
     if (!confirm('이 업무를 삭제할까요?')) return;
-    state.weeks[state.currentWeek] = state.weeks[state.currentWeek].filter(t => t.id !== id);
+    const found = findTask(id);
+    if (!found) return;
+    state.weeks[found.week] = state.weeks[found.week].filter(t => t.id !== id);
     save(); render();
   }
 
@@ -1865,8 +2160,8 @@
   }
   function setCategory(cat) {
     if (!editingTaskId) return;
-    const t = state.weeks[state.currentWeek].find(x => x.id === editingTaskId);
-    if (t) { t.cat = cat; save(); render(); }
+    const found = findTask(editingTaskId);
+    if (found) { found.task.cat = cat; save(); render(); }
     document.getElementById('cat-popup').classList.remove('active');
     editingTaskId = null;
   }
@@ -1931,11 +2226,43 @@
     } else {
       // 추가 모드
       if (state.weeks[name]) { toast('이미 있는 주차입니다'); return; }
-      state.weeks[name] = [];
+
+      // ⭐ 직전 주차의 미완료 업무 자동 이월
+      const prevWeek = state.weekOrder[state.weekOrder.length - 1];
+      const carriedTasks = [];
+      if (prevWeek && state.weeks[prevWeek]) {
+        state.weeks[prevWeek].forEach(t => {
+          // 완료 판정: t.done이 true이거나, nexts가 비고 memo가 있으면 완료
+          const nx = Array.isArray(t.nexts) ? t.nexts : [];
+          const isDone = t.done || (nx.length === 0 && (t.memo && t.memo.trim().length > 0));
+
+          // 미완료(보류 포함)면 새 주차로 복사
+          if (!isDone) {
+            carriedTasks.push({
+              id: uid(),
+              site: t.site,
+              text: t.text || '',
+              cat: t.cat,
+              memo: '', // 새 주차에서는 진행 내역 비움 (완료 항목 없음)
+              nexts: nx.map(n => ({ id: uid(), text: n.text })), // 미완료 할 일만 가져옴
+              hold: t.hold || false,
+              done: false,
+              createdAt: new Date().toISOString()
+            });
+          }
+        });
+      }
+
+      state.weeks[name] = carriedTasks;
       state.weekOrder.push(name);
       state.currentWeek = name;
       save(); render(); closeWeekModal();
-      toast(`${name} 추가됨`);
+
+      if (carriedTasks.length > 0) {
+        toast(`${name} 추가됨 (이전 주에서 미완료 ${carriedTasks.length}건 이월)`);
+      } else {
+        toast(`${name} 추가됨`);
+      }
     }
   }
 

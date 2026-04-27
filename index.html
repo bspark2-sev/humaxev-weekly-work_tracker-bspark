@@ -864,6 +864,7 @@
       <h1>주간 업무 체크리스트<span class="sub-date" id="today-date"></span></h1>
     </div>
     <div class="header-actions">
+      <button class="btn btn-sm btn-primary" id="btn-make-ppt">📊 주간보고 PPT</button>
       <button class="btn btn-sm" id="btn-export">내보내기</button>
       <label class="btn btn-sm" style="cursor:pointer;">
         불러오기
@@ -1025,6 +1026,52 @@
 
 <div class="toast" id="toast"></div>
 
+<!-- PPT 생성 모달 -->
+<div class="modal-overlay" id="ppt-modal">
+  <div class="modal" style="max-width: 540px;">
+    <h3>📊 주간보고 PPT 만들기</h3>
+
+    <div class="form-group">
+      <label>주차 선택</label>
+      <select id="ppt-week-select" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:6px;"></select>
+    </div>
+
+    <div class="form-group">
+      <label>주차 번호 (제목용 W##)</label>
+      <input type="text" id="ppt-week-num" placeholder="예: 17">
+    </div>
+
+    <div class="form-group">
+      <label>템플릿 PPT 파일</label>
+      <div id="ppt-template-status" style="font-size:12px; color:#666; margin-bottom:6px;">
+        템플릿 미설정
+      </div>
+      <label class="btn btn-sm" style="cursor:pointer; display:inline-block;">
+        템플릿 PPT 선택
+        <input type="file" id="ppt-template-file" accept=".pptx" style="display:none;">
+      </label>
+      <div style="font-size:11px; color:#888; margin-top:6px; line-height:1.5;">
+        💡 가장 최근 주간보고 PPT 파일을 선택하세요.<br>
+        한 번 선택하면 브라우저에 저장되어 다음에 자동 사용됩니다.<br>
+        슬라이드 1만 새 데이터로 교체되고, 2~4 슬라이드는 그대로 유지됩니다.
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>카테고리 매핑 미리보기</label>
+      <div id="ppt-preview" style="background:#f7f7f5; padding:10px; border-radius:6px; font-size:12px; max-height:200px; overflow-y:auto;"></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-sm btn-ghost" id="btn-close-ppt">취소</button>
+      <button class="btn btn-sm btn-primary" id="btn-generate-ppt">PPT 생성 및 다운로드</button>
+    </div>
+  </div>
+</div>
+
+<!-- PPT 생성용 라이브러리 -->
+<script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+
 <script>
   const STORAGE_KEY = 'weekly_checklist_v4';
 
@@ -1113,7 +1160,12 @@
       }
     } catch(e) {
       console.error('Firebase 로드 실패:', e);
-      alert('로드 실패: ' + e.message + '\n\nFirestore 활성화 및 보안 규칙을 확인하세요.');
+      // alert 대신 toast로 변경하여 페이지 로딩 차단 안 함
+      setTimeout(() => {
+        if (typeof toast === 'function') {
+          toast('⚠️ Firebase 연결 실패 - 로컬에서만 작동합니다');
+        }
+      }, 1000);
     }
     // 카테고리 포맷 호환
     Object.keys(state.categories).forEach(k => {
@@ -1956,6 +2008,319 @@
   document.getElementById('btn-close-cat').onclick = closeCatModal;
   document.getElementById('btn-create-cat').onclick = createCategory;
   document.getElementById('btn-add-task').onclick = addTaskFromTop;
+
+  // ============================================================
+  // 📊 주간보고 PPT 자동 생성
+  // ============================================================
+  const PPT_TEMPLATE_KEY = 'ppt_template_b64'; // IndexedDB 대신 localStorage 사용 (간단함)
+  const PPT_TEMPLATE_NAME_KEY = 'ppt_template_name';
+
+  // 카테고리 매핑: 체크리스트 카테고리 -> 보고서 카테고리
+  const CAT_MAP = {
+    '재계약':   '거점관리',
+    '운영':     '거점관리',
+    '신규계약': '사업개발',
+    '시공':     'Turnaround',
+    '교체':     'Turnaround',
+    '기타':     '기타'
+  };
+  const REPORT_CATS = ['사업개발', 'Embracing', '거점관리', 'Turnaround', '기타', '조직/Risk'];
+
+  function openPptModal() {
+    // 주차 선택 채우기
+    const sel = document.getElementById('ppt-week-select');
+    sel.innerHTML = state.weekOrder.map(w =>
+      `<option value="${escapeHtml(w)}" ${w === state.currentWeek ? 'selected' : ''}>${escapeHtml(w)}</option>`
+    ).join('');
+
+    // 주차 번호 자동 추출 (예: "26년 17W" → "17")
+    const m = (state.currentWeek || '').match(/(\d+)W|W(\d+)/i);
+    document.getElementById('ppt-week-num').value = m ? (m[1] || m[2]) : '';
+
+    // 템플릿 상태
+    updateTemplateStatus();
+
+    // 미리보기
+    updatePptPreview();
+
+    sel.onchange = updatePptPreview;
+    document.getElementById('ppt-week-num').oninput = updatePptPreview;
+    document.getElementById('ppt-modal').classList.add('active');
+  }
+
+  function closePptModal() {
+    document.getElementById('ppt-modal').classList.remove('active');
+  }
+
+  function updateTemplateStatus() {
+    const name = localStorage.getItem(PPT_TEMPLATE_NAME_KEY);
+    const el = document.getElementById('ppt-template-status');
+    if (name) {
+      el.innerHTML = `✅ 저장된 템플릿: <strong>${escapeHtml(name)}</strong>`;
+      el.style.color = '#2a7d3f';
+    } else {
+      el.innerHTML = '⚠️ 템플릿 미설정 - 기존 주간보고 PPT를 선택하세요';
+      el.style.color = '#a04040';
+    }
+  }
+
+  function updatePptPreview() {
+    const week = document.getElementById('ppt-week-select').value;
+    const tasks = state.weeks[week] || [];
+    const grouped = groupTasksByReportCategory(tasks);
+
+    const html = REPORT_CATS.map(cat => {
+      const items = grouped[cat] || [];
+      if (items.length === 0) {
+        return `<div style="opacity:0.5; padding:4px 0;"><strong>${cat}</strong>: <em>(없음)</em></div>`;
+      }
+      return `<div style="padding:4px 0; border-top:1px solid #e8e8e6;">
+        <strong>${cat}</strong> (${items.length}개)
+        <ul style="margin:4px 0 0 16px; padding:0;">
+          ${items.map(line => `<li style="margin:2px 0;">${escapeHtml(line)}</li>`).join('')}
+        </ul>
+      </div>`;
+    }).join('');
+
+    document.getElementById('ppt-preview').innerHTML = html;
+  }
+
+  // 체크리스트 task -> 보고서 한 줄 텍스트
+  function taskToReportLine(t) {
+    // "사이트명 업무내용 / 진행상황(있으면)"
+    let line = (t.site || '') + ' ' + (t.text || '');
+
+    // 미완료 nexts (할 일)
+    const nexts = (t.nexts || []).filter(n => n && !n.done && n.text).map(n => n.text);
+    if (nexts.length > 0) {
+      line += ' / ' + nexts.join(' / ');
+    }
+
+    // memo (완료 항목 ✓로 표시되어 있음)에서 ✓ 라인만 추출
+    if (t.memo) {
+      const doneLines = t.memo.split('\n')
+        .map(l => l.trim())
+        .filter(l => l.startsWith('✓'))
+        .map(l => l.replace(/^✓\s*\[[^\]]*\]\s*/, '').replace(/^✓\s*/, ''));
+      if (doneLines.length > 0) {
+        line += ' / ' + doneLines.join(' / ');
+      }
+    }
+
+    return line.replace(/\s+/g, ' ').trim();
+  }
+
+  function groupTasksByReportCategory(tasks) {
+    const result = {};
+    REPORT_CATS.forEach(c => result[c] = []);
+    tasks.forEach(t => {
+      const reportCat = CAT_MAP[t.cat] || '거점관리';
+      const line = taskToReportLine(t);
+      if (line) result[reportCat].push(line);
+    });
+    return result;
+  }
+
+  // 템플릿 파일 업로드 처리
+  document.getElementById('ppt-template-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!file.name.endsWith('.pptx')) {
+      alert('PPTX 파일만 업로드 가능합니다');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        // base64로 저장 (localStorage는 5-10MB 제한이 있어 PPTX 크기에 따라 IndexedDB 권장이지만 일단 시도)
+        const b64 = ev.target.result.split(',')[1];
+        localStorage.setItem(PPT_TEMPLATE_KEY, b64);
+        localStorage.setItem(PPT_TEMPLATE_NAME_KEY, file.name);
+        updateTemplateStatus();
+        toast('템플릿이 저장되었습니다');
+      } catch(err) {
+        alert('템플릿 저장 실패: ' + err.message + '\n\n파일이 너무 클 수 있습니다. 작은 PPT를 사용해보세요.');
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // PPT 생성 메인 함수
+  async function generatePpt() {
+    const week = document.getElementById('ppt-week-select').value;
+    const weekNum = document.getElementById('ppt-week-num').value.trim();
+    if (!weekNum) { alert('주차 번호를 입력하세요 (예: 17)'); return; }
+
+    const b64 = localStorage.getItem(PPT_TEMPLATE_KEY);
+    if (!b64) { alert('먼저 템플릿 PPT 파일을 선택하세요'); return; }
+
+    const tasks = state.weeks[week] || [];
+    const grouped = groupTasksByReportCategory(tasks);
+    const wPad = String(weekNum).padStart(2, '0');
+
+    try {
+      // base64 -> Uint8Array
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+      // PPTX(=ZIP) 풀기 - fflate 사용 (JSZip은 디렉터리 엔트리 추가하여 PowerPoint가 손상으로 인식)
+      const unzipped = fflate.unzipSync(bytes);
+
+      // 텍스트 디코더/인코더
+      const decoder = new TextDecoder();
+      const encoder = new TextEncoder();
+
+      // 1. 슬라이드 1 수정
+      const slide1Path = 'ppt/slides/slide1.xml';
+      let slide1Xml = decoder.decode(unzipped[slide1Path]);
+
+      // 제목의 W## 변경
+      slide1Xml = slide1Xml.replace(/<a:t>\(W\d+<\/a:t>/g, `<a:t>(W${wPad}<\/a:t>`);
+
+      // 6개 카테고리 셀 내용 교체
+      // 셀 인덱스: 3=사업개발, 5=Embracing, 7=거점관리, 9=Turnaround, 11=기타, 13=조직/Risk
+      const cellMap = [
+        { idx: 3,  cat: '사업개발' },
+        { idx: 5,  cat: 'Embracing' },
+        { idx: 7,  cat: '거점관리' },
+        { idx: 9,  cat: 'Turnaround' },
+        { idx: 11, cat: '기타' },
+        { idx: 13, cat: '조직/Risk' }
+      ];
+
+      slide1Xml = replaceCellContents(slide1Xml, cellMap, grouped);
+      unzipped[slide1Path] = encoder.encode(slide1Xml);
+
+      // 2. 슬라이드 2~4 제목의 W## 변경
+      for (let i = 2; i <= 4; i++) {
+        const path = `ppt/slides/slide${i}.xml`;
+        if (unzipped[path]) {
+          let xml = decoder.decode(unzipped[path]);
+          xml = xml.replace(/\(W\d+\)/g, `(W${wPad})`);
+          unzipped[path] = encoder.encode(xml);
+        }
+      }
+
+      // 3. 다시 ZIP으로 압축 (PowerPoint 호환)
+      const zipped = fflate.zipSync(unzipped);
+
+      // 4. 다운로드
+      const blob = new Blob([zipped], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `26년_SEV_주간보고_W${wPad}_박범수.pptx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast(`✅ W${wPad} 주간보고 PPT 다운로드 완료`);
+      closePptModal();
+    } catch(err) {
+      console.error(err);
+      alert('PPT 생성 실패: ' + err.message);
+    }
+  }
+
+  // XML 셀 내용 교체 함수 (V5 검증된 로직)
+  function replaceCellContents(xml, cellMap, grouped) {
+    const cellRegex = /<a:tc>[\s\S]*?<\/a:tc>/g;
+    const cells = xml.match(cellRegex) || [];
+
+    // 본문 셀(데이터가 있는 셀)에서 paragraph 템플릿 추출
+    // bg1(흰색) 텍스트가 아닌 첫 번째 paragraph 사용
+    let bodyTemplate = null;
+    for (const idx of [7, 9, 3, 5, 11, 13]) {
+      if (idx >= cells.length) continue;
+      const cell = cells[idx];
+      const paras = cell.match(/<a:p>[\s\S]*?<\/a:p>/g) || [];
+      for (const p of paras) {
+        const runs = p.match(/<a:r>[\s\S]*?<\/a:r>/g) || [];
+        if (runs.length > 0 && !p.includes('val="bg1"')) {
+          bodyTemplate = p;
+          break;
+        }
+      }
+      if (bodyTemplate) break;
+    }
+
+    let result = xml;
+    cellMap.forEach(({ idx, cat }) => {
+      if (idx >= cells.length) return;
+      const oldCell = cells[idx];
+      const items = grouped[cat] || [];
+      const newCell = setCellTexts(oldCell, items, bodyTemplate);
+      result = result.replace(oldCell, newCell);
+    });
+    return result;
+  }
+
+  // 셀의 텍스트를 새 항목들로 교체. 셀의 자체 paragraph 스타일 유지, 없으면 bodyTemplate 사용
+  function setCellTexts(cell, texts, bodyTemplate) {
+    const paras = cell.match(/<a:p>[\s\S]*?<\/a:p>/g) || [];
+    if (paras.length === 0) return cell;
+
+    if (texts.length === 0) {
+      // 텍스트 없음: 첫 paragraph만 유지하고 그 안의 <a:r> 제거
+      let firstPara = paras[0].replace(/<a:r>[\s\S]*?<\/a:r>/g, '');
+      let newCell = cell;
+      paras.slice(1).forEach(p => { newCell = newCell.replace(p, ''); });
+      newCell = newCell.replace(paras[0], firstPara);
+      return newCell;
+    }
+
+    // 셀 자체에 본문 스타일 paragraph가 있으면 그것을 우선 사용 (배경색 텍스트 제외)
+    let cellTemplate = null;
+    for (const p of paras) {
+      const runs = p.match(/<a:r>[\s\S]*?<\/a:r>/g) || [];
+      if (runs.length > 0 && !p.includes('val="bg1"')) {
+        cellTemplate = p;
+        break;
+      }
+    }
+    const template = cellTemplate || bodyTemplate;
+    if (!template) return cell; // 템플릿 없으면 원본 유지
+
+    const newParas = texts.map(t => makeParaFromTemplate(template, t)).join('');
+
+    let newCell = cell;
+    paras.slice(1).forEach(p => { newCell = newCell.replace(p, ''); });
+    newCell = newCell.replace(paras[0], newParas);
+    return newCell;
+  }
+
+  // 템플릿 paragraph에서 첫 번째 run의 텍스트만 새 텍스트로 교체
+  function makeParaFromTemplate(template, text) {
+    const safe = String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+
+    let p = template;
+    const runs = p.match(/<a:r>[\s\S]*?<\/a:r>/g) || [];
+    if (runs.length === 0) return p;
+
+    // 첫 run에서 <a:t>...</a:t>만 새 텍스트로 교체
+    const firstRun = runs[0].replace(/<a:t>[\s\S]*?<\/a:t>/, `<a:t>${safe}</a:t>`);
+    // 나머지 run들 제거
+    runs.slice(1).forEach(r => { p = p.replace(r, ''); });
+    p = p.replace(runs[0], firstRun);
+    return p;
+  }
+
+  // PPT 모달 이벤트 등록
+  document.getElementById('btn-make-ppt').onclick = openPptModal;
+  document.getElementById('btn-close-ppt').onclick = closePptModal;
+  document.getElementById('btn-generate-ppt').onclick = generatePpt;
+  document.getElementById('ppt-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'ppt-modal') closePptModal();
+  });
+
+  // ============================================================
 
   const d = new Date();
   document.getElementById('today-date').textContent =

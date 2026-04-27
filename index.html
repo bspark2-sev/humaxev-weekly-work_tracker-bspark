@@ -1061,6 +1061,10 @@
 
     <div class="form-group">
       <label>카테고리 매핑 미리보기</label>
+      <div style="font-size:11px; color:#888; margin-bottom:6px; line-height:1.5;">
+        ✅ <strong>체크 완료한 "다음 할 일" 항목만</strong> 보고서에 포함됩니다.<br>
+        미체크 항목은 제외되며, 완료 내역이 없는 현장은 표시되지 않습니다.
+      </div>
       <div id="ppt-preview" style="background:#f7f7f5; padding:10px; border-radius:6px; font-size:12px; max-height:200px; overflow-y:auto;"></div>
     </div>
 
@@ -2162,25 +2166,32 @@
   }
 
   // 체크리스트 task -> 보고서 한 줄 텍스트
+  // ⭐ 체크(완료)된 항목만 보고서에 포함. 미체크된 "다음 할 일"은 제외.
   function taskToReportLine(t) {
-    // "사이트명 업무내용 / 진행상황(있으면)"
-    let line = (t.site || '') + ' ' + (t.text || '');
-
-    // 미완료 nexts (할 일)
-    const nexts = (t.nexts || []).filter(n => n && !n.done && n.text).map(n => n.text);
-    if (nexts.length > 0) {
-      line += ' / ' + nexts.join(' / ');
+    // 완료된 항목들 추출 (memo에 "✓ [날짜] 내용" 형태로 저장됨)
+    const doneLines = [];
+    if (t.memo) {
+      t.memo.split('\n').forEach(l => {
+        const trimmed = l.trim();
+        if (trimmed.startsWith('✓')) {
+          // "✓ [날짜] 내용" 또는 "✓ 내용"에서 내용만 추출
+          const cleaned = trimmed.replace(/^✓\s*\[[^\]]*\]\s*/, '').replace(/^✓\s*/, '');
+          if (cleaned) doneLines.push(cleaned);
+        }
+      });
     }
 
-    // memo (완료 항목 ✓로 표시되어 있음)에서 ✓ 라인만 추출
-    if (t.memo) {
-      const doneLines = t.memo.split('\n')
-        .map(l => l.trim())
-        .filter(l => l.startsWith('✓'))
-        .map(l => l.replace(/^✓\s*\[[^\]]*\]\s*/, '').replace(/^✓\s*/, ''));
-      if (doneLines.length > 0) {
-        line += ' / ' + doneLines.join(' / ');
-      }
+    // 완료된 항목이 하나도 없으면 보고서에 포함하지 않음
+    if (doneLines.length === 0) return '';
+
+    // "현장명 - 완료내용1 / 완료내용2 / ..."
+    const site = (t.site || '').trim();
+    const baseText = (t.text || '').trim();
+
+    let line = site;
+    if (baseText) line += ' ' + baseText;
+    if (doneLines.length > 0) {
+      line += (line ? ' ' : '') + doneLines.join(' / ');
     }
 
     return line.replace(/\s+/g, ' ').trim();

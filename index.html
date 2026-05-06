@@ -2228,23 +2228,25 @@
       if (state.weeks[name]) { toast('이미 있는 주차입니다'); return; }
 
       // ⭐ 직전 주차의 미완료 업무 자동 이월
+      // 미체크된 할 일이 하나라도 있는 카드는 통째로 (진행 내역 memo 포함) 새 주차로 이월
       const prevWeek = state.weekOrder[state.weekOrder.length - 1];
       const carriedTasks = [];
       if (prevWeek && state.weeks[prevWeek]) {
         state.weeks[prevWeek].forEach(t => {
-          // 완료 판정: t.done이 true이거나, nexts가 비고 memo가 있으면 완료
           const nx = Array.isArray(t.nexts) ? t.nexts : [];
-          const isDone = t.done || (nx.length === 0 && (t.memo && t.memo.trim().length > 0));
+          // 완료 판정: t.done이 true이거나, 미체크 할 일(nexts)이 하나도 없으면 완료된 카드
+          // → 미체크 할 일이 하나라도 남아있으면 그 카드는 통째로 이월
+          const hasUnchecked = nx.length > 0;
+          const isDone = t.done || !hasUnchecked;
 
-          // 미완료(보류 포함)면 새 주차로 복사
           if (!isDone) {
             carriedTasks.push({
               id: uid(),
               site: t.site,
               text: t.text || '',
               cat: t.cat,
-              memo: '', // 새 주차에서는 진행 내역 비움 (완료 항목 없음)
-              nexts: nx.map(n => ({ id: uid(), text: n.text })), // 미완료 할 일만 가져옴
+              memo: t.memo || '', // 지난주 진행 내역(✓ 라인 및 자유 메모) 그대로 보존
+              nexts: nx.map(n => ({ id: uid(), text: n.text })), // 미체크 할 일만 새 ID로 복사
               hold: t.hold || false,
               done: false,
               createdAt: new Date().toISOString()
@@ -2259,7 +2261,7 @@
       save(); render(); closeWeekModal();
 
       if (carriedTasks.length > 0) {
-        toast(`${name} 추가됨 (이전 주에서 미완료 ${carriedTasks.length}건 이월)`);
+        toast(`${name} 추가됨 (이전 주에서 미완료 카드 ${carriedTasks.length}건 이월)`);
       } else {
         toast(`${name} 추가됨`);
       }

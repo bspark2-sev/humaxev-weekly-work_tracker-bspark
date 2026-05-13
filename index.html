@@ -2228,7 +2228,9 @@
       if (state.weeks[name]) { toast('이미 있는 주차입니다'); return; }
 
       // ⭐ 직전 주차의 미완료 업무 자동 이월
-      // 미체크된 할 일이 하나라도 있는 카드는 통째로 (진행 내역 memo 포함) 새 주차로 이월
+      // 미체크된 할 일이 하나라도 있는 카드는 새 주차로 이월
+      // 단, memo의 ✓ 완료 라인은 이전 주차에 귀속되므로 제거하고 자유 메모만 보존
+      // (현장별 뷰는 각 주차 entry로 누적되므로 과거 ✓ 라인도 거기서 계속 보임)
       const prevWeek = state.weekOrder[state.weekOrder.length - 1];
       const carriedTasks = [];
       if (prevWeek && state.weeks[prevWeek]) {
@@ -2240,12 +2242,18 @@
           const isDone = t.done || !hasUnchecked;
 
           if (!isDone) {
+            // 이전 주의 ✓ 완료 라인은 제거, 자유 메모만 보존
+            const freeMemo = (t.memo || '').split('\n')
+              .filter(l => !l.trim().startsWith('✓'))
+              .join('\n')
+              .trim();
+
             carriedTasks.push({
               id: uid(),
               site: t.site,
               text: t.text || '',
               cat: t.cat,
-              memo: t.memo || '', // 지난주 진행 내역(✓ 라인 및 자유 메모) 그대로 보존
+              memo: freeMemo, // 자유 메모만 (✓ 라인은 제거)
               nexts: nx.map(n => ({ id: uid(), text: n.text })), // 미체크 할 일만 새 ID로 복사
               hold: t.hold || false,
               done: false,
@@ -2496,24 +2504,53 @@
 
   // 체크리스트 task -> 보고서 한 줄 텍스트
   // ⭐ 체크(완료)된 항목만 보고서에 포함. 미체크된 "다음 할 일"은 제외.
+  // ⭐ 카드가 이월된 경우(createdAt이 있는 경우), 그 시점 이후의 ✓ 라인만 포함
+  //    (이전 주차의 완료 내역이 PPT에 섞이지 않도록)
   function taskToReportLine(t) {
+    // 카드 이월 시점(이 시점 이후의 ✓만 PPT에 포함)
+    const cutoff = t.createdAt ? new Date(t.createdAt) : null;
+
+    // ✓ 라인의 타임스탬프 "MM/DD HH:MM" 또는 "YYYY.MM.DD HH:MM"을 Date로 파싱
+    const parseStamp = (stamp) => {
+      if (!stamp) return null;
+      let m = stamp.match(/^(\d{4})\.(\d{1,2})\.(\d{1,2})\s+(\d{1,2}):(\d{2})$/);
+      if (m) return new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5]);
+      m = stamp.match(/^(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2})$/);
+      if (m) {
+        // 같은 해 형식 — cutoff가 있으면 그 해, 없으면 올해
+        const year = cutoff ? cutoff.getFullYear() : new Date().getFullYear();
+        return new Date(year, +m[1]-1, +m[2], +m[3], +m[4]);
+      }
+      return null;
+    };
+
     // 완료된 항목들 추출 (memo에 "✓ [날짜] 내용" 형태로 저장됨)
     const doneLines = [];
     if (t.memo) {
       t.memo.split('\n').forEach(l => {
         const trimmed = l.trim();
-        if (trimmed.startsWith('✓')) {
-          // "✓ [날짜] 내용" 또는 "✓ 내용"에서 내용만 추출
-          const cleaned = trimmed.replace(/^✓\s*\[[^\]]*\]\s*/, '').replace(/^✓\s*/, '');
-          if (cleaned) doneLines.push(cleaned);
+        if (!trimmed.startsWith('✓')) return;
+
+        // "✓ [날짜] 내용" 파싱
+        const match = trimmed.match(/^✓\s*(?:\[([^\]]+)\]\s*)?(.+)$/);
+        if (!match) return;
+        const stamp = match[1] || '';
+        const text = (match[2] || '').trim();
+        if (!text) return;
+
+        // cutoff가 있고 타임스탬프 파싱 가능하면 시점 비교
+        if (cutoff && stamp) {
+          const stampDate = parseStamp(stamp);
+          if (stampDate && stampDate < cutoff) return; // 이월 시점 이전 → 제외
         }
+        doneLines.push(text);
       });
     }
 
     // 완료된 항목이 하나도 없으면 보고서에 포함하지 않음
     if (doneLines.length === 0) return '';
 
-    // "현장명 - 완료내용1 / 완료내용2 / ..."
+    // "현장명 완료내용1 / 완료내용2 / ..."
     const site = (t.site || '').trim();
     const baseText = (t.text || '').trim();
 
